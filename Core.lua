@@ -1,32 +1,3 @@
---[[
-    Just X Hub — Core module. Возвращает функцию function(Lib) -> Core.
-    Core = общий движок: ESP/детект/автолут-интеракт/анти-логика/реестры
-    выбора по вкладкам/конструктор стандартных секций. Main/Hotel/Mines
-    подключают Core как зависимость, сами по себе ничего не переопределяют.
-
-    v4.1 багфиксы:
-    - Bookcase получал ESP без всяких промптов — убран слишком общий матч
-      name=="Table" из Drawers-семейства (скорее всего ловил случайную
-      внутреннюю деталь с общим именем "Table" внутри Bookcase)
-    - Figure детектился ещё и по любому Model с именем "Figure" (слишком
-      широкий матч) — это и давало вторую нотификацию/ESP "из ниоткуда" и,
-      похоже, тот самый "призрак за картой". Оставлен только FigureRig/FigureSetup
-    - Dupe снова не шлёт нотификацию (только ESP), как и было изначально
-    - Crucifix: убран общий матч name=="Crucifix" (и в fallback-детекте тоже) —
-      остался только CrucifixWall, но в дропдауне всё ещё подписан "Crucifix"
-    - Anti Eyes: -83 -> -850 (подтверждённое рабочее значение)
-    - Anti Figure -> Anti Figure Hearing (реальный смысл, спамит Crouch
-      remote); координируется со Speed hack, который спамит тот же ремоут с
-      противоположным значением — пока Anti Figure Hearing включён, спам от
-      скорости на этот ремоут приостанавливается
-    - LootHolder-гвард для Auto Interact: глубина обхода вверх уменьшена с 3
-      до 1 — иначе LootHolder от ПЕРВОГО открытого выдвижного ящика того же
-      контейнера мог считаться "уже открыт" для двух других ящиков-соседей
-    - Добавлен глобальный кулдаун между любыми двумя авто-интеракциями
-      (не строго решает конфликт с РУЧНЫМ открытием двери игроком, но хотя
-      бы наш собственный скрипт не будет дёргать два промпта одновременно)
---]]
-
 return function(Lib)
     local Core = {}
 
@@ -37,7 +8,6 @@ return function(Lib)
 
     local remotesFolder = ReplicatedStorage:FindFirstChild("RemotesFolder")
     local crouchEvent = remotesFolder and remotesFolder:FindFirstChild("Crouch")
-    local motorEvent = remotesFolder and remotesFolder:FindFirstChild("MotorReplication")
 
     Core.LP = LP
     Core.RunService = RunService
@@ -237,7 +207,7 @@ return function(Lib)
         if not hi.Parent then hi.Parent = inst end
 
         local bb = Instance.new("BillboardGui")
-        bb.Adornee = inst; bb.Size = UDim2.new(0,130,0,34)
+        bb.Adornee = inst; bb.Size = UDim2.new(0,130,0,46)
         bb.StudsOffset = Vector3.new(0,3,0); bb.AlwaysOnTop = true
         bb.MaxDistance = math.huge; bb.ResetOnSpawn = false
         pcall(function() bb.Parent = game:GetService("CoreGui") end)
@@ -247,16 +217,17 @@ return function(Lib)
         if mobType == "Door" then
             displayText = "Door [" .. getDoorText(inst) .. "]"
         else
-            displayText = "⚠  " .. mobType
+            displayText = mobType .. "\n[...]"
         end
 
         local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1,0,1,0)
         lbl.BackgroundTransparency = 1; lbl.Text = displayText
         lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 16; lbl.TextColor3 = col
         lbl.TextStrokeTransparency = 0; lbl.TextStrokeColor3 = Color3.new(0,0,0)
+        lbl.TextWrapped = true
         lbl.Parent = bb
 
-        espData[inst] = {hi=hi, bb=bb, mobType=mobType}
+        espData[inst] = {hi=hi, bb=bb, lbl=lbl, mobType=mobType}
 
         local ok, prompt = pcall(function() return inst:FindFirstChildWhichIsA("ProximityPrompt", true) end)
         if ok and prompt then
@@ -322,6 +293,28 @@ return function(Lib)
         return nil, nil
     end
 
+    -- RushNew (и, предположительно, аналог у Ambush) — Transparency=1 части,
+    -- на которых обычный Highlight иногда вообще не рендерится. По референсу:
+    -- сдвиг на 0.999 (визуально всё ещё невидимо) + добавление Humanoid в
+    -- модель чинит это.
+    local function fixupRushLikeEntity(inst)
+        task.spawn(function()
+            local target = nil
+            for _ = 1, 40 do
+                if not inst.Parent then return end
+                target = inst:FindFirstChild("RushNew", true) or inst:FindFirstChild("AmbushNew", true) or inst:FindFirstChildWhichIsA("BasePart", true)
+                if target then break end
+                task.wait(0.05)
+            end
+            if not target then return end
+            if not inst:FindFirstChild("HighlightHumanoid") then
+                pcall(function() Instance.new("Humanoid", inst).Name = "HighlightHumanoid" end)
+            end
+            pcall(function() target.Transparency = 0.999; target.Material = Enum.Material.Plastic end)
+            if not inst.PrimaryPart then pcall(function() inst.PrimaryPart = target end) end
+        end)
+    end
+
     identifyMob = function(inst)
         local name = inst.Name
 
@@ -337,14 +330,20 @@ return function(Lib)
             local p1 = inst.Parent
             if p1 and p1.Parent and p1.Parent.Name == "CurrentRooms" then return "Giggle", inst end
         end
-        if name == "RushMoving" and inst.Parent == workspace then return "Rush", inst end
+        if name == "RushMoving" and inst.Parent == workspace then
+            fixupRushLikeEntity(inst)
+            return "Rush", inst
+        end
         if name == "Eyes" and inst.Parent == workspace then return "Eyes", inst end
         if name == "Screech" then return "Screech", inst end
         if name == "DoorFake" and inst.Parent and inst.Parent.Name == "SideroomDupe" then
             local doorObj = inst:FindFirstChild("Door")
             if doorObj then return "Dupe", doorObj end
         end
-        if name == "AmbushMoving" and inst.Parent == workspace then return "Ambush", inst end
+        if name == "AmbushMoving" and inst.Parent == workspace then
+            fixupRushLikeEntity(inst)
+            return "Ambush", inst
+        end
         if name == "Door" and inst.Parent and inst.Parent.Name == "Door" and inst.Parent.Parent and inst.Parent.Parent.Parent and inst.Parent.Parent.Parent.Name == "CurrentRooms" then
             return "Door", inst
         end
@@ -456,10 +455,15 @@ return function(Lib)
                         local dist = (hrp.Position - pos).Magnitude
                         if dist > GHOST_DISTANCE then
                             removeESP(inst)
-                        elseif not espCullExempt[d.mobType] then
-                            local vis = dist <= espMaxDistance
-                            if d.hi then pcall(function() d.hi.Enabled = vis end) end
-                            if d.bb then pcall(function() d.bb.Enabled = vis end) end
+                        else
+                            if d.mobType ~= "Door" and d.lbl then
+                                pcall(function() d.lbl.Text = d.mobType .. "\n[" .. math.floor(dist) .. "]" end)
+                            end
+                            if not espCullExempt[d.mobType] then
+                                local vis = dist <= espMaxDistance
+                                if d.hi then pcall(function() d.hi.Enabled = vis end) end
+                                if d.bb then pcall(function() d.bb.Enabled = vis end) end
+                            end
                         end
                     end
                 end
@@ -782,7 +786,9 @@ return function(Lib)
     -- прикидка), постоянный прямой FireServer, а не перехват исходящего вызова
     local eyesPresentCount = 0
     local function trackEyesPresence(inst)
-        if inst.Name == "Eyes" then
+        -- "Lookman" на этом этаже — тот же противник, что "Eyes" (по аналогии
+        -- с референсом, где это буквально алиас одной и той же сущности)
+        if inst.Name == "Eyes" or inst.Name == "Lookman" then
             eyesPresentCount = eyesPresentCount + 1
             inst.AncestryChanged:Connect(function()
                 if not inst:IsDescendantOf(workspace) then
@@ -797,8 +803,13 @@ return function(Lib)
     task.spawn(function()
         while true do
             task.wait(0.05)
-            if antiEyesEnabled and eyesPresentCount > 0 and motorEvent then
-                pcall(function() motorEvent:FireServer(-850, 0) end)
+            if antiEyesEnabled and eyesPresentCount > 0 then
+                -- Ищем ремоут каждый раз заново, а не полагаемся на значение,
+                -- закэшированное при загрузке Core.lua — если MotorReplication
+                -- ещё не успел реплицироваться в момент старта скрипта, старое
+                -- значение навсегда оставалось nil и цикл молча ничего не делал
+                local ev = remotesFolder and remotesFolder:FindFirstChild("MotorReplication")
+                if ev then pcall(function() ev:FireServer(-850, 0) end) end
             end
         end
     end)
@@ -824,13 +835,31 @@ return function(Lib)
         end
     end)
 
-    -- Anti Figure Hearing: спамит Crouch(true, nil). Speed hack (в Main.lua)
-    -- спамит ТОТ ЖЕ ремоут с Crouch(false, true) на каждый RenderStepped —
-    -- при одновременном включении обоих эти вызовы конфликтуют, и Speed почти
-    -- всегда "перебивает" (60 раз/сек против наших 10 раз/сек), из-за чего
-    -- Figure всё равно слышит. Поэтому Speed должен САМ проверять
-    -- Core.isAntiFigureHearingEnabled() и не спамить туда, пока это включено —
-    -- это сделано в Main.lua.
+    -- Anti Figure Hearing — найдено в референсном скрипте: реальная защита
+    -- не в гонке за Crouch-ремоут, а в том, чтобы у Figure/FigureRig/FigureSetup
+    -- отключить CanTouch на всех частях. Если "слышит" реализовано через
+    -- тач-хитбокс (а не только серверный флаг crouch), это убирает саму
+    -- причину детекта — и тогда неважно, что там спамит Speed хак.
+    -- Crouch-спам оставляю как доп. подстраховку (вдруг сервер всё же
+    -- где-то читает флаг crouch напрямую), просто он больше не единственная
+    -- линия защиты.
+    local function purgeFigureTouch()
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if d.Name == "FigureRig" or d.Name == "FigureSetup" then
+                for _, part in ipairs(d:GetDescendants()) do
+                    if part:IsA("BasePart") then pcall(function() part.CanTouch = false end) end
+                end
+            end
+        end
+    end
+    workspace.DescendantAdded:Connect(function(d)
+        if antiFigureHearingEnabled and (d.Name == "FigureRig" or d.Name == "FigureSetup") then
+            task.wait(0.1)
+            for _, part in ipairs(d:GetDescendants()) do
+                if part:IsA("BasePart") then pcall(function() part.CanTouch = false end) end
+            end
+        end
+    end)
     task.spawn(function()
         while true do
             task.wait(0.1)
@@ -991,7 +1020,10 @@ return function(Lib)
     Core.setAntiScreech = function(v) antiScreechEnabled = v; if v then pcall(purgeAllScreech) end end
     Core.setAntiEyes = function(v) antiEyesEnabled = v end
     Core.setAntiHalt = function(v) antiHaltEnabled = v; if v then purgeShade() end end
-    Core.setAntiFigureHearing = function(v) antiFigureHearingEnabled = v end
+    Core.setAntiFigureHearing = function(v)
+        antiFigureHearingEnabled = v
+        if v then pcall(purgeFigureTouch) end
+    end
     Core.isAntiFigureHearingEnabled = function() return antiFigureHearingEnabled end
     Core.setAntiSeekObstacles = function(v) antiSeekObstaclesEnabled = v; if v then pcall(purgeSeekArmHazards) end end
     Core.setAntiSnare = function(v) antiSnareEnabled = v; if v then pcall(scanAllSnares) end end
