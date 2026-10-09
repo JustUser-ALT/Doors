@@ -1,18 +1,17 @@
 --[[
     Abysall Hub (Doors) on JustLib
-    ------------------------------------------------------------
-    Usage (executor):
-        getgenv().AbysallConfig = {
-            BaseUrl = "https://raw.githubusercontent.com/<you>/<repo>/main/AbysallJustLib/",
-            -- or run from files in your executor's workspace folder:
-            -- LocalFolder = "AbysallJustLib",
-        }
-        loadstring(game:HttpGet(getgenv().AbysallConfig.BaseUrl .. "Loader.lua"))()
+    Repo: https://github.com/JustUser-ALT/Doors
 
-    Optional config keys:
-        JustLibUrl    - raw URL of JustLib.lua (default: JustUser-ALT/JustLib main)
-        ComponentsUrl - base URL for Components/Environment.luau + ESP.luau
-                        (default: the copies in BaseUrl / LocalFolder)
+    Just run:
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/JustUser-ALT/Doors/main/Loader.lua"))()
+
+    Optional, set BEFORE running (everything has a default):
+        getgenv().AbysallConfig = {
+            BaseUrl       = "https://raw.githubusercontent.com/JustUser-ALT/Doors/main/",
+            LocalFolder   = "Doors",   -- run from files in the executor workspace instead of GitHub
+            JustLibUrl    = "...",     -- raw URL of JustLib.lua
+            ComponentsUrl = "...",     -- base URL that contains Components/Environment + Components/ESP
+        }
 ]]
 
 local Env = getgenv()
@@ -23,30 +22,71 @@ if Env.Abysall then
     return
 end
 
-local function Fetch(Path)
+local BaseUrl = Config.BaseUrl or "https://raw.githubusercontent.com/JustUser-ALT/Doors/main/"
+
+-- repo layout (relative to BaseUrl). Change here if a file lives somewhere else.
+local Files = {
+    Interface   = "Interface.lua",
+    Environment = "Components/Environment.luau",
+    ESP         = "Components/ESP.luau",
+    Main        = "Game/Main.luau",
+    Lobby       = "Game/Lobby.luau",
+}
+
+local LobbyPlaceId = 6516141723
+
+-- ".luau" <-> ".lua" so a renamed file still loads
+local function Alternate(Path)
+    if string.sub(Path, -5) == ".luau" then
+        return string.sub(Path, 1, -6) .. ".lua"
+    elseif string.sub(Path, -4) == ".lua" then
+        return Path .. "u"
+    end
+end
+
+local function Read(Path, Base)
     if Config.LocalFolder and readfile then
         return readfile(Config.LocalFolder .. "/" .. Path)
     end
-    local Base = Config.BaseUrl
-    assert(Base, "Set getgenv().AbysallConfig.BaseUrl (or LocalFolder) before running the loader")
-    return game:HttpGet(Base .. Path)
+    return game:HttpGet((Base or BaseUrl) .. Path)
 end
 
-local function FetchComponent(Name)
-    if Config.ComponentsUrl then
-        return game:HttpGet(Config.ComponentsUrl .. "Components/" .. Name)
+local function Fetch(Path, Base)
+    local Ok, Result = pcall(Read, Path, Base)
+    if Ok and type(Result) == "string" and #Result > 0 and not string.find(Result, "^404") then
+        return Result
     end
-    return Fetch("Components/" .. Name)
+    local Other = Alternate(Path)
+    if Other then
+        local Ok2, Result2 = pcall(Read, Other, Base)
+        if Ok2 and type(Result2) == "string" and #Result2 > 0 and not string.find(Result2, "^404") then
+            return Result2
+        end
+    end
+    error("[Abysall] could not load '" .. Path .. "' (" .. tostring(Result) .. ")", 0)
+end
+
+local function Load(Path, Base)
+    local Fn, Err = loadstring(Fetch(Path, Base))
+    assert(Fn, "[Abysall] syntax error in '" .. Path .. "': " .. tostring(Err))
+    return Fn()
 end
 
 Env.Abysall = {
-    Environment = loadstring(FetchComponent("Environment.luau"))(),
-    ESPLibrary = loadstring(FetchComponent("ESP.luau"))(),
-    Interface = loadstring(Fetch("Interface.lua"))(),
+    Environment = Load(Files.Environment, Config.ComponentsUrl),
+    ESPLibrary  = Load(Files.ESP, Config.ComponentsUrl),
+    Interface   = Load(Files.Interface),
 }
 
-if game.PlaceId ~= 6516141723 then
-    loadstring(Fetch("Games/Doors/Main.luau"))()
-else
-    loadstring(Fetch("Games/Doors/Lobby.luau"))()
+local Ok, Err = pcall(function()
+    if game.PlaceId ~= LobbyPlaceId then
+        Load(Files.Main)
+    else
+        Load(Files.Lobby)
+    end
+end)
+
+if not Ok then
+    warn("[Abysall] failed to start: " .. tostring(Err))
+    Env.Abysall = nil
 end
