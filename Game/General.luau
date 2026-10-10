@@ -1,14 +1,3 @@
---[[
-	General tab  (Abysall Hub, JustLib build)
-
-	Loaded by Main.luau:   Abysall.LoadModule("General")(Shared)
-	Contents: Character, Self, Miscellaneous and Debug groupboxes (code moved 1:1 out of Main.luau).
-	The "Automation" groupbox now lives in Hotel.luau.
-
--- Mutable Main state (Character, Humanoid, RemotesFolder, Floor, CustomPhysics, OldJump, OldSlide) is
--- read/written through Shared.<Name> so it always reflects Main's live value.
-]]
-
 return function(Shared)
 	local Abysall, Functions, GameData, Globals, Groupboxes, LatestRoom, LocalPlayer, Objects, Options, PartProperties, Services, Tabs, Toggles, Window
 	   = Shared.Abysall, Shared.Functions, Shared.GameData, Shared.Globals, Shared.Groupboxes, Shared.LatestRoom, Shared.LocalPlayer, Shared.Objects, Shared.Options, Shared.PartProperties, Shared.Services, Shared.Tabs, Shared.Toggles, Shared.Window
