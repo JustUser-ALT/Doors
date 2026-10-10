@@ -1,19 +1,3 @@
---[[
-    Abysall Hub (Doors) on JustLib
-    Repo: https://github.com/JustUser-ALT/Doors
-
-    Just run:
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/JustUser-ALT/Doors/main/Loader.lua"))()
-
-    Optional, set BEFORE running (everything has a default):
-        getgenv().AbysallConfig = {
-            BaseUrl       = "https://raw.githubusercontent.com/JustUser-ALT/Doors/main/",
-            LocalFolder   = "Doors",   -- run from files in the executor workspace instead of GitHub
-            JustLibUrl    = "...",     -- raw URL of JustLib.lua
-            ComponentsUrl = "...",     -- base URL that contains Components/Environment + Components/ESP
-        }
-]]
-
 local Env = getgenv()
 local Config = Env.AbysallConfig or {}
 
