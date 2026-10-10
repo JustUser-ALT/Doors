@@ -1,15 +1,3 @@
---[[
-	Hotel & Hotel tab  (Abysall Hub, JustLib build)
-
-	Loaded by Main.luau:   Abysall.LoadModule("Hotel")(Shared)
-	Contents: the "Automation" groupbox that used to be on the General tab, together with all of its
-	logic (Auto Breaker Box, Auto Library, Skip Seek, Auto Breaker Room, Auto Hotel, Auto Interact, Auto Closet ...).
-	The code is moved 1:1 out of Main.luau.
-
--- Mutable Main state (Character, Humanoid, RemotesFolder, Floor, CustomPhysics, OldJump, OldSlide) is
--- read/written through Shared.<Name> so it always reflects Main's live value.
-]]
-
 return function(Shared)
 	local CurrentRooms, Functions, Globals, Groupboxes, LocalPlayer, Options, Tabs, Toggles, Window
 	   = Shared.CurrentRooms, Shared.Functions, Shared.Globals, Shared.Groupboxes, Shared.LocalPlayer, Shared.Options, Shared.Tabs, Shared.Toggles, Shared.Window
